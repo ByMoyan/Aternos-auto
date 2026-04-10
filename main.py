@@ -9,7 +9,7 @@ def run():
         log("启动浏览器")
 
         browser = p.chromium.launch(
-            headless=True,
+            headless=False,
             args=["--no-sandbox"]
         )
 
