@@ -61,16 +61,17 @@ def start_xvfb():
             stderr=subprocess.DEVNULL,
         )
         os.environ["DISPLAY"] = ":99"
-        time.sleep(1)
-        log("Xvfb 已启动")
+        time.sleep(2)
+        log(f"Xvfb 已启动，DISPLAY={os.environ.get('DISPLAY')}")
     except Exception as e:
-        log(f"Xvfb 启动失败（继续尝试）: {e}")
+        log(f"Xvfb 启动失败: {e}")
 
 def run():
     log("启动浏览器 (camoufox/Firefox)")
+    log(f"DISPLAY={os.environ.get('DISPLAY', '未设置')}")
     try:
-        log("正在初始化 Firefox...")
-        with Firefox(headless=True, geoip=False) as browser:
+        log("正在初始化 Firefox (headless=False, 使用 Xvfb)...")
+        with Firefox(headless=False, geoip=False) as browser:
             log("Firefox 启动完成，新建页面...")
             page = browser.new_page()
             log("正在打开 Aternos")
