@@ -66,7 +66,9 @@ def start_xvfb():
 def run():
     log("启动浏览器 (camoufox/Firefox)")
     try:
-        with Firefox(headless=True) as browser:
+        log("正在初始化 Firefox...")
+        with Firefox(headless=True, geoip=False) as browser:
+            log("Firefox 初始化完成，新建页面...")
             page = browser.new_page()
             log("正在打开 Aternos")
             page.goto("https://aternos.org/go/", wait_until="domcontentloaded")
