@@ -66,38 +66,11 @@ def start_xvfb():
     except Exception as e:
         log(f"Xvfb 启动失败（继续尝试）: {e}")
 
-def launch_firefox_with_timeout(timeout=90):
-    result = {}
-    def _launch():
-        try:
-            result["browser"] = Firefox(headless=True, geoip=False)
-        except Exception as e:
-            result["error"] = e
-
-    t = threading.Thread(target=_launch)
-    t.start()
-
-    for i in range(timeout):
-        if "browser" in result or "error" in result:
-            break
-        if i % 10 == 9:
-            log(f"Firefox 启动中... 已等待 {i+1} 秒")
-        time.sleep(1)
-
-    if "browser" in result:
-        return result["browser"]
-    elif "error" in result:
-        raise result["error"]
-    else:
-        raise TimeoutError(f"Firefox 启动超时 ({timeout}秒)")
-
 def run():
     log("启动浏览器 (camoufox/Firefox)")
     try:
-        log("正在初始化 Firefox...")
-        browser = launch_firefox_with_timeout(timeout=90)
-        log("Firefox 初始化完成，新建页面...")
-        with browser:
+        with Firefox(headless=True, geoip=False) as browser:
+            log("Firefox 启动完成，新建页面...")
             page = browser.new_page()
             log("正在打开 Aternos")
             page.goto("https://aternos.org/go/", wait_until="domcontentloaded")
