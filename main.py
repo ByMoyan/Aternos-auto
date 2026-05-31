@@ -1,9 +1,10 @@
-from camoufox.sync_api import Camoufox as Firefox
+import asyncio
 import time
 import threading
 import subprocess
 import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from camoufox.async_api import AsyncCamoufox as Firefox
 
 os.environ["CAMOUFOX_UPDATE"] = "0"
 os.environ["CAMOUFOX_SKIP_UPDATE"] = "1"
@@ -22,12 +23,12 @@ def is_cloudflare_page(title, url):
         return True
     return False
 
-def wait_for_cloudflare(page, timeout=120):
+async def wait_for_cloudflare(page, timeout=120):
     log("等待 Cloudflare 验证通过...")
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            title = page.title()
+            title = await page.title()
             url = page.url
             if not is_cloudflare_page(title, url):
                 log(f"Cloudflare 已通过，当前页面: {title}")
@@ -35,7 +36,7 @@ def wait_for_cloudflare(page, timeout=120):
             log(f"仍在验证中: {title}")
         except Exception:
             pass
-        time.sleep(3)
+        await asyncio.sleep(3)
     log("警告: Cloudflare 验证超时")
     return False
 
@@ -66,36 +67,46 @@ def start_xvfb():
     except Exception as e:
         log(f"Xvfb 启动失败: {e}")
 
-def run():
+async def run():
     log("启动浏览器 (camoufox/Firefox)")
     log(f"DISPLAY={os.environ.get('DISPLAY', '未设置')}")
     try:
-        log("正在初始化 Firefox (headless=False, 使用 Xvfb)...")
-        with Firefox(headless=False, geoip=False) as browser:
-            log("Firefox 启动完成，新建页面...")
-            page = browser.new_page()
-            log("正在打开 Aternos")
-            page.goto("https://aternos.org/go/", wait_until="domcontentloaded", timeout=60000)
-            wait_for_cloudflare(page, timeout=120)
+        log("正在初始化 Firefox...")
+        async with Firefox(headless=False, geoip=False) as browser:
+            log("Firefox 启动完成，正在新建页面...")
+            page = await asyncio.wait_for(browser.new_page(), timeout=30)
+            log("页面创建成功，正在打开 Aternos...")
+            await asyncio.wait_for(
+                page.goto("https://aternos.org/go/", wait_until="domcontentloaded"),
+                timeout=60
+            )
+            log("页面加载完成")
+            await wait_for_cloudflare(page, timeout=120)
             while True:
                 try:
                     url = page.url
-                    title = page.title()
+                    title = await page.title()
                     log(f"当前网址: {url}")
                     log(f"页面标题: {title}")
                 except Exception as e:
                     log(f"页面错误: {e}")
-                time.sleep(20)
+                await asyncio.sleep(20)
+    except asyncio.TimeoutError:
+        log("操作超时，重启浏览器")
+        raise
     except Exception as e:
         log(f"浏览器崩溃: {e}")
         raise
 
+async def main():
+    while True:
+        try:
+            await run()
+        except Exception as e:
+            log(f"重启浏览器，原因: {e}")
+            await asyncio.sleep(5)
+
 if __name__ == "__main__":
     threading.Thread(target=start_health_server, daemon=True).start()
     start_xvfb()
-    while True:
-        try:
-            run()
-        except Exception as e:
-            log(f"重启浏览器，原因: {e}")
-            time.sleep(5)
+    asyncio.run(main())
