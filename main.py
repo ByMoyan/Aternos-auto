@@ -1,4 +1,8 @@
 from camoufox.sync_api import Camoufox as Firefox
+import time
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import os
 
 def log(msg):
     print(msg, flush=True)
@@ -31,6 +35,20 @@ def wait_for_cloudflare(page, timeout=120):
     log("警告: Cloudflare 验证超时")
     return False
 
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+    def log_message(self, format, *args):
+        pass
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    log(f"Health server 启动在端口 {port}")
+    server.serve_forever()
+
 def run():
     log("启动浏览器 (camoufox/Firefox)")
     with Firefox(headless=True) as browser:
@@ -49,4 +67,4 @@ def run():
             time.sleep(20)
 
 if __name__ == "__main__":
-    run()
+    t = threading
