@@ -1,8 +1,9 @@
 from camoufox.sync_api import Camoufox as Firefox
 import time
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import subprocess
 import os
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 def log(msg):
     print(msg, flush=True)
@@ -49,22 +50,48 @@ def start_health_server():
     log(f"Health server 启动在端口 {port}")
     server.serve_forever()
 
+def start_xvfb():
+    try:
+        subprocess.Popen(
+            ["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        os.environ["DISPLAY"] = ":99"
+        time.sleep(1)
+        log("Xvfb 已启动")
+    except Exception as e:
+        log(f"Xvfb 启动失败（继续尝试）: {e}")
+
 def run():
     log("启动浏览器 (camoufox/Firefox)")
-    with Firefox(headless=True) as browser:
-        page = browser.new_page()
-        log("正在打开 Aternos")
-        page.goto("https://aternos.org/go/", wait_until="domcontentloaded")
-        wait_for_cloudflare(page, timeout=120)
-        while True:
-            try:
-                url = page.url
-                title = page.title()
-                log(f"当前网址: {url}")
-                log(f"页面标题: {title}")
-            except Exception as e:
-                log(f"错误: {e}")
-            time.sleep(20)
+    try:
+        with Firefox(headless=True) as browser:
+            page = browser.new_page()
+            log("正在打开 Aternos")
+            page.goto("https://aternos.org/go/", wait_until="domcontentloaded")
+            wait_for_cloudflare(page, timeout=120)
+            while True:
+                try:
+                    url = page.url
+                    title = page.title()
+                    log(f"当前网址: {url}")
+                    log(f"页面标题: {title}")
+                except Exception as e:
+                    log(f"页面错误: {e}")
+                time.sleep(20)
+    except Exception as e:
+        log(f"浏览器崩溃: {e}")
+        raise
 
 if __name__ == "__main__":
-    t = threading
+    threading.Thread(target=start_health_server, daemon=True).start()
+
+    start_xvfb()
+
+    while True:
+        try:
+            run()
+        except Exception as e:
+            log(f"重启浏览器，原因: {e}")
+            time.sleep(5)
