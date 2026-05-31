@@ -69,6 +69,7 @@ def start_xvfb():
 def run():
     log("启动浏览器 (camoufox/Firefox)")
     try:
+        log("正在初始化 Firefox...")
         with Firefox(headless=True, geoip=False) as browser:
             log("Firefox 启动完成，新建页面...")
             page = browser.new_page()
@@ -90,9 +91,7 @@ def run():
 
 if __name__ == "__main__":
     threading.Thread(target=start_health_server, daemon=True).start()
-
     start_xvfb()
-
     while True:
         try:
             run()
