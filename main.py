@@ -1,5 +1,4 @@
-from camoufox.sync_api import Firefox
-import time
+from camoufox.sync_api import Camoufox as Firefox
 
 def log(msg):
     print(msg, flush=True)
