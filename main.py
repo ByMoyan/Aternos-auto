@@ -73,7 +73,7 @@ def run():
             log("Firefox 启动完成，新建页面...")
             page = browser.new_page()
             log("正在打开 Aternos")
-            page.goto("https://aternos.org/go/", wait_until="domcontentloaded")
+            page.goto("https://aternos.org/go/", wait_until="domcontentloaded", timeout=60000)
             wait_for_cloudflare(page, timeout=120)
             while True:
                 try:
