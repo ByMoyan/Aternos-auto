@@ -1,44 +1,14 @@
-import asyncio
+from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
+import subprocess
 import time
 import threading
-import subprocess
 import os
+import glob
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from camoufox.async_api import AsyncCamoufox as Firefox
-
-os.environ["CAMOUFOX_UPDATE"] = "0"
-os.environ["CAMOUFOX_SKIP_UPDATE"] = "1"
 
 def log(msg):
     print(msg, flush=True)
-
-CLOUDFLARE_TITLES = ["just a moment", "请稍候", "一下"]
-
-def is_cloudflare_page(title, url):
-    title_lower = title.lower()
-    for cf_title in CLOUDFLARE_TITLES:
-        if cf_title in title_lower:
-            return True
-    if "challenge" in url.lower() or "/cdn-cgi/" in url.lower():
-        return True
-    return False
-
-async def wait_for_cloudflare(page, timeout=120):
-    log("等待 Cloudflare 验证通过...")
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            title = await page.title()
-            url = page.url
-            if not is_cloudflare_page(title, url):
-                log(f"Cloudflare 已通过，当前页面: {title}")
-                return True
-            log(f"仍在验证中: {title}")
-        except Exception:
-            pass
-        await asyncio.sleep(3)
-    log("警告: Cloudflare 验证超时")
-    return False
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -63,50 +33,75 @@ def start_xvfb():
         )
         os.environ["DISPLAY"] = ":99"
         time.sleep(2)
-        log(f"Xvfb 已启动，DISPLAY={os.environ.get('DISPLAY')}")
+        log("Xvfb 已启动")
     except Exception as e:
         log(f"Xvfb 启动失败: {e}")
 
-async def run():
-    log("启动浏览器 (camoufox/Firefox)")
-    log(f"DISPLAY={os.environ.get('DISPLAY', '未设置')}")
+def find_camoufox_binary():
+    patterns = [
+        "/root/.cache/camoufox/**/camoufox",
+        "/root/.cache/camoufox/**/firefox",
+        os.path.expanduser("~/.cache/camoufox/**/camoufox"),
+        os.path.expanduser("~/.cache/camoufox/**/firefox"),
+    ]
+    for pattern in patterns:
+        matches = glob.glob(pattern, recursive=True)
+        for match in matches:
+            if os.path.isfile(match) and os.access(match, os.X_OK):
+                log(f"找到 camoufox 二进制: {match}")
+                return match
+    log("未找到 camoufox 二进制，列出缓存目录:")
     try:
-        log("正在初始化 Firefox...")
-        async with Firefox(headless=False, geoip=False) as browser:
-            log("Firefox 启动完成，正在新建页面...")
-            page = await asyncio.wait_for(browser.new_page(), timeout=30)
-            log("页面创建成功，正在打开 Aternos...")
-            await asyncio.wait_for(
-                page.goto("https://aternos.org/go/", wait_until="domcontentloaded"),
-                timeout=60
-            )
-            log("页面加载完成")
-            await wait_for_cloudflare(page, timeout=120)
-            while True:
-                try:
-                    url = page.url
-                    title = await page.title()
-                    log(f"当前网址: {url}")
-                    log(f"页面标题: {title}")
-                except Exception as e:
-                    log(f"页面错误: {e}")
-                await asyncio.sleep(20)
-    except asyncio.TimeoutError:
-        log("操作超时，重启浏览器")
-        raise
+        result = subprocess.run(
+            ["find", "/root/.cache/camoufox", "-type", "f"],
+            capture_output=True, text=True, timeout=5
+        )
+        log(result.stdout[:500])
     except Exception as e:
-        log(f"浏览器崩溃: {e}")
-        raise
+        log(f"列目录失败: {e}")
+    return None
 
-async def main():
-    while True:
-        try:
-            await run()
-        except Exception as e:
-            log(f"重启浏览器，原因: {e}")
-            await asyncio.sleep(5)
+def run():
+    with sync_playwright() as p:
+        camoufox_bin = find_camoufox_binary()
+
+        if camoufox_bin:
+            log(f"使用 camoufox Firefox: {camoufox_bin}")
+            browser = p.firefox.launch(
+                executable_path=camoufox_bin,
+                headless=False,
+            )
+        else:
+            log("camoufox 未找到，使用普通 Firefox")
+            browser = p.firefox.launch(headless=True)
+
+        context = browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) "
+                "Gecko/20100101 Firefox/125.0"
+            ),
+            locale="zh-CN",
+            timezone_id="Asia/Shanghai",
+        )
+        page = context.new_page()
+        stealth_sync(page)
+
+        log("打开 https://aternos.org/go/")
+        page.goto("https://aternos.org/go/", wait_until="domcontentloaded", timeout=60000)
+
+        while True:
+            url = page.url
+            title = page.title()
+            log(f"网址: {url} | 标题: {title}")
+            time.sleep(10)
 
 if __name__ == "__main__":
     threading.Thread(target=start_health_server, daemon=True).start()
     start_xvfb()
-    asyncio.run(main())
+    while True:
+        try:
+            run()
+        except Exception as e:
+            log(f"错误，重启: {e}")
+            time.sleep(5)
