@@ -49,43 +49,22 @@ def is_cloudflare_page(title, url):
         return True
     return False
 
-def new_page_with_timeout(browser, timeout=30):
-    result = {}
-    def _create():
-        try:
-            result['page'] = browser.new_page()
-        except Exception as e:
-            result['error'] = e
-    t = threading.Thread(target=_create)
-    t.start()
-    t.join(timeout=timeout)
-    if 'page' in result:
-        return result['page']
-    elif 'error' in result:
-        raise result['error']
-    else:
-        raise TimeoutError(f"new_page() 超时 ({timeout}秒)")
-
 def run():
-    log("启动 camoufox Firefox...")
-    try:
-        with Firefox(headless=True, geoip=False) as browser:
-            log("Firefox 启动成功，新建页面...")
-            page = new_page_with_timeout(browser, timeout=30)
-            log("页面创建成功，打开 Aternos...")
-            page.goto("https://aternos.org/go/", wait_until="domcontentloaded", timeout=60000)
-            while True:
-                url = page.url
-                title = page.title()
-                log(f"网址: {url} | 标题: {title}")
-                if is_cloudflare_page(title, url):
-                    log("仍在 Cloudflare 验证中，等待...")
-                else:
-                    log("已进入网站！")
-                time.sleep(10)
-    except Exception as e:
-        log(f"错误: {e}")
-        raise
+    log("启动 camoufox Firefox (headless=False + Xvfb)...")
+    with Firefox(headless=False, geoip=False) as browser:
+        log("Firefox 启动成功，新建页面...")
+        page = browser.new_page()
+        log("页面创建成功，打开 Aternos...")
+        page.goto("https://aternos.org/go/", wait_until="domcontentloaded", timeout=60000)
+        while True:
+            url = page.url
+            title = page.title()
+            log(f"网址: {url} | 标题: {title}")
+            if is_cloudflare_page(title, url):
+                log("Cloudflare 验证中...")
+            else:
+                log("已进入网站！")
+            time.sleep(10)
 
 if __name__ == "__main__":
     threading.Thread(target=start_health_server, daemon=True).start()
